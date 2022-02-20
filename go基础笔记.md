@@ -1,5 +1,23 @@
 # Goroutine
 
+1. 常见的并发模型： 多线程和消息传递，goroutine是基于CSP的消息传递模型
+2. goroutine能动态伸缩栈空间，2kb到1GB。相比线程2MB开销小很多
+3. 同一个goroutine中顺序一致性的内存模型能得到保证，不同的goroutine不能保证，需要定义明确的同步事件来保证
+4. 控制一个或多个goroutine退出，一是close(channel)搭配select case <- channel 一起用，二是context cancel方案和select case <- ctx.Done()一起用
+```go
+//这个例子mu的加锁和解锁不在同一个goroutine，所以可能会出错，可能先执行了main goroutine中的unlock
+func main() {
+    var mu sync.Mutex
+
+    go func(){
+        fmt.Println("你好, 世界")
+        mu.Lock()
+    }()
+
+    mu.Unlock()
+}
+```
+
 可以使用`sync.WaitGroup`等待go协程的运行
 
 ```go
@@ -57,6 +75,28 @@ exit
 
 
 # Channel
+
+1. 无缓存的channel每次发送操作都有对应的接送动作，不然会死锁
+2. 无缓存channel在同一goroutine使用发送和接收操作，容易造成死锁
+3. 无缓存的Channel上的发送操作总在对应的接收操作完成前发生
+4. 可以通过带缓存channel的大小来控制并发量
+5. 可以通过带缓存Channel的使用量和最大容量比例来判断程序运行的并发率。当管道为空的时候可以认为是空闲状态，当管道满了时任务是繁忙状态，这对于后台一些低级任务的运行是有参考价值的
+6. 对于带缓冲的Channel，对于Channel的第K个接收完成操作发生在第K+C个发送操作完成之前，其中C是Channel的缓存大小
+```go
+//利用带缓存channel控制并发量
+var limit = make(chan int, 3)
+
+func main() {
+    for _, w := range work {
+        go func() {
+            limit <- 1
+            w()
+            <-limit
+        }()
+    }
+    select{}
+}
+```
 
 使用goroutine会产生竞者条件(race condition), 解决的三种办法
 
@@ -127,7 +167,7 @@ func main() {
 
 创建context首先创建空的context
 
-```go
+```go 
 ctx := context.Background()
 ctx := context.TODO() //不知道用不用时候可以使用todo创建
 ```
